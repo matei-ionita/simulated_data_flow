@@ -1,5 +1,11 @@
 library(tidyverse)
 
+# Choose distribution and parameters
+skew <- FALSE
+df <- 5L # degrees of freedom for t distribution; ignored if skew=TRUE
+a <- 4L # first component of alpha in skew-normal distribution; ignored if skew=FALSE
+noise_multiplier <- 1/6 # values used: 1/6, 1/3, 2/3, 4/3
+
 # Set some constants
 K_true <- 75L # clusters
 P <- 10L # markers
@@ -26,7 +32,8 @@ sd_marginal <- get_sd_marginal(P) # legacy function; should be replaced with run
 means_by_sample <- array(dim = c(M, K_true,P))
 for (m in seq(M)) {
   for (p in seq(P)) {
-    means_by_sample[m,,p] <- vapply(comp[,p], function(x) rnorm(1, mean = means_baseline[p,x], sd = sd_marginal[p,x]/6),
+    means_by_sample[m,,p] <- vapply(comp[,p], function(x) rnorm(1, mean = means_baseline[p,x], 
+                                                                sd = noise_multiplier * sd_marginal[p,x]),
                                numeric(1))
   }
 }
@@ -53,8 +60,21 @@ for (m in seq(M)) {
     this_N <- ifelse(k == K_true, m*N - start + 1, floor(pro_by_sample[m,k] * N))
     stop <- start + this_N - 1
     
-    data[c(start:stop),] <- mvtnorm::rmvnorm(this_N, mean = means_by_sample[m,k,], 
-                                             sigma = var_baseline[,,k])
+    if (skew) {
+      alpha <- c(rep(a,1),rep(0,p-1))
+      data[c(start:stop),] <- sn::rmsn(this_N, alpha = alpha,
+                                       xi = means_by_sample[m,k,], 
+                                       Omega = var_baseline[,,k])
+    }
+    else if (is.infinite(df)) {
+      data[c(start:stop),] <- mvtnorm::rmvnorm(this_N, mean = means_by_sample[m,k,], 
+                                              sigma = var_baseline[,,k])
+    }
+    else {
+      scale <- 1- 2/ df # Keep the same variance regardless of df
+      data[c(start:stop),] <- mvtnorm::rmvt(this_N, df = df, delta = means_by_sample[m,k,], 
+                                            sigma = scale* var_baseline[,,k])
+    }
     true_labels[c(start:stop)] <- k
     
     start <- stop + 1
@@ -65,6 +85,9 @@ for (m in seq(M)) {
 suppressWarnings( plot_kdes_with_means(data, means_by_sample) )
 
 
+###########
+s <- apply(means_by_sample, c(2,3), sd)
+noise_frac <- mean(s) / 1.9
 
 
 

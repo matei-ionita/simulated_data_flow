@@ -36,7 +36,10 @@ plot_kdes_with_means <- function(data, means) {
   P <- ncol(data)
   
   for (p in seq(P)) {
-    kde <- KernSmooth::bkde(data[,p])
+    # kde <- KernSmooth::bkde(data[,p])
+    sel <- which(data[,p]>-1 & data[,p]<5)
+    kde <- KernSmooth::bkde(data[sel,p])
+    
     df_kde <- data.frame(x = kde$x, y = kde$y)
     df_means <- data.frame(m = as.vector(means[,,p]))
     
